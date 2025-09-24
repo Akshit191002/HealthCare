@@ -30,10 +30,16 @@ export class FhirService {
     return mockFhirId;
   }
 
-    async createPractitioner(doctor: { firstName: string; lastName: string; dob: string; gender: string; specialization: string; licenseNumber: string }) {
+  async createPractitioner(doctor: { firstName: string; lastName: string; dob: string; gender: string; specialization: string; licenseNumber: string }) {
     const mockFhirId = 'mock-fhir-practitioner-id-789';
     this.logger.log(`FHIR practitioner created (mock) with ID: ${mockFhirId}`);
     return mockFhirId;
+  }
+
+  async createAppointment(data: { patientFhirId: string; doctorFhirId: string; date: string; notes?: string }) {
+    const mockId = 'mock-fhir-appointment-123';
+    this.logger.log(`FHIR appointment created (mock) with ID: ${mockId}`);
+    return mockId;
   }
 
   // async createObservation(patientFhirId: string, observation: { code: string; value: number; unit: string }) {

@@ -5,13 +5,17 @@ import { PatientsController } from './patients.controller';
 import { FhirService } from '../fhir/fhir.service';
 import { Patient, PatientSchema } from 'src/patient/patient.schema';
 import { AuthModule } from 'src/auth/auth.module';
+import { DoctorsModule } from 'src/doctor/doctor.module';
+import { AppointmentsModule } from 'src/appointment/appointment.module';
+import { AppointmentsService } from 'src/appointment/appointment.service';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Patient.name, schema: PatientSchema }]),
-    AuthModule
+    AuthModule,DoctorsModule
   ],
   providers: [PatientsService, FhirService],
   controllers: [PatientsController],
+  exports: [PatientsService],
 })
 export class PatientsModule {}

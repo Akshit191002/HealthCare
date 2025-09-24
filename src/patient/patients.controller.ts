@@ -5,13 +5,18 @@ import { RegisterPatientDto } from './dto/register-patient.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RolesGuard } from 'src/utils/roles.guard';
 import { Roles } from 'src/utils/roles.decorator';
+import { DoctorsService } from 'src/doctor/doctor.service';
+import { AppointmentsService } from 'src/appointment/appointment.service';
 
 @ApiTags('Patients')
 @ApiBearerAuth('bearerAuth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('patients')
 export class PatientsController {
-  constructor(private readonly patientsService: PatientsService) { }
+  constructor(
+    private readonly patientsService: PatientsService,
+    private readonly doctorsService: DoctorsService,
+    private readonly appointmentsService: AppointmentsService) { }
 
   @Roles('patient')
   @Post()
@@ -32,6 +37,15 @@ export class PatientsController {
   }
 
   @Roles('patient')
+  @Get('doctors')
+  @ApiOperation({ summary: 'Get all doctors' })
+  @ApiResponse({ status: 200, description: 'Doctors list retrieved successfully.' })
+  @ApiResponse({ status: 500, description: 'Internal server error.' })
+  async getAll() {
+    return await this.doctorsService.getAllDoctors();
+  }
+
+  @Roles('patient')
   @Get(':id')
   @ApiOperation({ summary: 'Get patient by ID (only if belongs to current user)' })
   @ApiResponse({ status: 200, description: 'Patient details retrieved successfully' })
@@ -39,4 +53,12 @@ export class PatientsController {
   getById(@Param('id') id: string, @Req() req) {
     return this.patientsService.getPatientById(id, req.user.userId);
   }
+
+  @Roles('patient')
+  @Get('myAppointment')
+  @ApiOperation({ summary: 'Get all appointments for logged-in patient' })
+  async myAppointments(@Req() req) {
+    return this.appointmentsService.getAppointmentsForPatient(req.user.userId);
+  }
+
 }

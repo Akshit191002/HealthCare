@@ -44,12 +44,18 @@ export class DoctorsService {
     }
 
 
-    async getDoctorById(id: string, userId: string) {
+    async getDoctorById(id: string, userId?: string) {
+        const query: any = { _id: id };
+        if (userId) query.user = userId;
         const doctor = await this.doctorModel.findOne({ _id: id, user: userId });
         if (!doctor) throw new NotFoundException('Doctor not found or unauthorized');
 
         const decryptedData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
-        return { decryptedData };
+        return {
+            id: doctor._id,
+            fhirId: doctor.fhirId,
+            localData: decryptedData,
+        };
     }
 
     async getMyDoctor(userId: string) {
@@ -69,5 +75,12 @@ export class DoctorsService {
             fhirId: doc.fhirId,
             localData: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
         }));
+    }
+
+    async getDoctorByUserId(userId: string) {
+        const doctor = await this.doctorModel.findOne({ user: userId });
+        if (!doctor) throw new NotFoundException('Doctor not found');
+        const decryptedData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
+        return { id: doctor._id, fhirId: doctor.fhirId, localData: decryptedData };
     }
 }
