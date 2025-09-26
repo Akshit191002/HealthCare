@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { FhirService } from '../fhir/fhir.service';
 import { encryptPHI, decryptPHI } from '../utils/encryption.util';
 import { Patient, PatientDocument } from './patient.schema';
 import { RegisterPatientDto } from './dto/register-patient.dto';
-import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
-import { DoctorDocument } from 'src/doctor/doctor.schema';
+import { UpdatePatientDto } from './dto/update-patient.dto';
+import { PatientResponseDto } from './dto/patient-response.dto';
 
 @Injectable()
 export class PatientsService {
@@ -14,7 +14,6 @@ export class PatientsService {
 
   constructor(
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
-    @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private fhirService: FhirService,
   ) { }
 
@@ -23,76 +22,196 @@ export class PatientsService {
       throw new BadRequestException('Invalid patient data. All fields are required.');
     }
 
-    const existingPatient = await this.patientModel.findOne({ user: userId });
-    if (existingPatient) {
-      throw new BadRequestException('Patient profile already exists for this account');
+    const userObjectId = new Types.ObjectId(userId);
+
+    let patientDoc = await this.patientModel.findOne({ user: userObjectId });
+
+    if (!patientDoc) {
+      patientDoc = new this.patientModel({ user: userObjectId, patients: [] });
+    }
+
+    if (patientDoc.patients.length >= 4) {
+      throw new BadRequestException('You can create a maximum of 4 patient accounts');
     }
 
     const { encryptedData, iv, tag } = encryptPHI(JSON.stringify(data));
-
     const fhirId = await this.fhirService.createPatient(data);
 
-    const patient = new this.patientModel({
+    patientDoc.patients.push({
       encryptedData,
       iv,
       tag,
       fhirId,
-      user: userId,
     });
 
-    await patient.save();
+    await patientDoc.save();
 
-    this.logger.log(`Patient saved locally with FHIR ID: ${fhirId}`);
-    return { id: patient._id, fhirId };
+    this.logger.log(`Patient added for user ${userId} with FHIR ID: ${fhirId}`);
+    return { id: patientDoc._id, fhirId };
   }
 
-
-  async getPatient() {
-    const patients = await this.patientModel.find();
-    if (!patients || patients.length === 0) {
+  async getAllPatients() {
+    const patientDocs = await this.patientModel.find();
+    if (!patientDocs || patientDocs.length === 0) {
       throw new NotFoundException('No patients found');
     }
 
-    const decryptedPatients = patients.map((p) => {
-      const decryptedData = JSON.parse(
-        decryptPHI(p.encryptedData, p.iv, p.tag),
-      );
-      return {
-        id: p._id,
+    const decrypted = patientDocs.flatMap((doc) =>
+      doc.patients.map((p) => ({
+        user: doc.user,
         fhirId: p.fhirId,
-        data: decryptedData,
-      };
-    });
+        data: JSON.parse(decryptPHI(p.encryptedData, p.iv, p.tag)),
+      })),
+    );
 
-    this.logger.log(`Fetched ${decryptedPatients.length} patients`);
-    return decryptedPatients;
+    this.logger.log(`Fetched ${decrypted.length} patients`);
+    return decrypted;
   }
 
+  // async getMyPatient(userId: string) {
+  //   const userObjectId = new Types.ObjectId(userId);
+  //   const patientDoc = await this.patientModel.findOne({ user: userObjectId });
 
-  async getPatientById(id: string, userId: string) {
-    const patient = await this.patientModel.findOne({ _id: id, user: userId });
-    if (!patient) throw new Error('Patient not found or not authorized');
+  //   if (!patientDoc || patientDoc.patients.length === 0) {
+  //     throw new NotFoundException('No patients found for this user');
+  //   }
 
-    const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
-
-    this.logger.log(`Fetched patient from FHIR with ID: ${patient.fhirId}`);
-    return { decryptedData };
-  }
-
+  //   return patientDoc.patients.map((p) => ({
+  //     id: p._id,
+  //     fhirId: p.fhirId,
+  //     data: JSON.parse(decryptPHI(p.encryptedData, p.iv, p.tag)),
+  //   }));
+  // }
 
   async getMyPatient(userId: string) {
-    const patient = await this.patientModel.findOne({ user: userId });
-    if (!patient) {
-      throw new NotFoundException('Patient not found for this user');
+    const userObjectId = new Types.ObjectId(userId);
+    const patientDoc = await this.patientModel.findOne({ user: userObjectId });
+
+    if (!patientDoc || !patientDoc.patients || patientDoc.patients.length === 0) {
+      throw new NotFoundException('No patients found for this user');
     }
 
+    return patientDoc.patients.map((p) => {
+      const decryptedData = JSON.parse(decryptPHI(p.encryptedData, p.iv, p.tag));
+
+      let age;
+      if (decryptedData.dob) {
+        const dob = new Date(decryptedData.dob);
+        const now = new Date();
+        let years = now.getFullYear() - dob.getFullYear();
+        age = years
+      }
+      return {
+        id: p._id?.toString(),
+        fhirId: p.fhirId,
+        age,
+        ...decryptedData,
+      };
+    })
+  }
+
+  // async getPatientById(userId: string, patientId: string) {
+  //   const userObjectId = new Types.ObjectId(userId);
+
+  //   const patientDoc = await this.patientModel.findOne(
+  //     { user: userObjectId, 'patients._id': patientId },
+  //     { 'patients.$': 1 }
+  //   );
+
+  //   if (!patientDoc || !patientDoc.patients || patientDoc.patients.length === 0) {
+  //     throw new NotFoundException('Patient not found or not authorized');
+  //   }
+
+  //   const patient = patientDoc.patients[0];
+  //   const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
+
+  //   this.logger.log(`Fetched single patient with ID: ${patientId}, FHIR ID: ${patient.fhirId}`);
+
+  //   return {
+  //     id: patient._id,
+  //     fhirId: patient.fhirId,
+  //     data: decryptedData,
+  //   };
+  // }
+
+  async getPatientById(userId: string, patientId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+
+    const patientDoc = await this.patientModel.findOne(
+      { user: userObjectId, 'patients._id': patientId },
+      { 'patients.$': 1 }
+    );
+
+    if (!patientDoc || !patientDoc.patients || patientDoc.patients.length === 0) {
+      throw new NotFoundException('Patient not found or not authorized');
+    }
+    let age;
+    const patient = patientDoc.patients[0];
     const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
 
+    const dob = new Date(decryptedData.dob);
+    const now = new Date();
+    let years = now.getFullYear() - dob.getFullYear();
+
+    age = years
+
+    this.logger.log(`Fetched single patient with ID: ${patientId}, FHIR ID: ${patient.fhirId}`);
+
     return {
-      id: patient._id,
+      id: patient._id?.toString(),
       fhirId: patient.fhirId,
-      data: decryptedData,
+      age,
+      ...decryptedData,
     };
   }
 
+  async updateDeatils(userId: string, patientId: string, updateDto: UpdatePatientDto) {
+    const userObjectId = new Types.ObjectId(userId);
+
+    const patientDoc = await this.patientModel.findOne(
+      { user: userObjectId, 'patients._id': patientId },
+      { 'patients.$': 1 }
+    );
+
+    if (!patientDoc || !patientDoc.patients || patientDoc.patients.length === 0) {
+      throw new NotFoundException('Patient not found or not authorized');
+    }
+
+    const patient = patientDoc.patients[0];
+    const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
+
+    const mergeDefined = (original: any, updates: any) => {
+      if (!updates) return original;
+      return Object.keys(updates).reduce((acc, key) => {
+        if (updates[key] !== undefined) acc[key] = updates[key];
+        return acc;
+      }, { ...original });
+    };
+
+    const updatedData = {
+      ...decryptedData,
+      ...updateDto,
+      address: mergeDefined(decryptedData.address, updateDto.address),
+      emergencyContact: mergeDefined(decryptedData.emergencyContact, updateDto.emergencyContact),
+
+    };
+
+    const { encryptedData, iv, tag } = encryptPHI(JSON.stringify(updatedData));
+
+    await this.patientModel.updateOne(
+      { user: userObjectId, 'patients._id': patientId },
+      {
+        $set: {
+          'patients.$.encryptedData': encryptedData,
+          'patients.$.iv': iv,
+          'patients.$.tag': tag,
+        },
+      }
+    );
+
+    return {
+      id: patientId,
+      data: updatedData,
+    };
+  }
 }

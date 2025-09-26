@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-// import axios from 'axios';
 
 @Injectable()
 export class FhirService {
@@ -24,7 +23,6 @@ export class FhirService {
   // }
 
   async createPatient(patient: { firstName: string; lastName: string; dob: string; gender: string }) {
-    // Return a fake FHIR patient object
     const mockFhirId = 'mock-fhir-id-123';
     this.logger.log(`FHIR patient created (mock) with ID: ${mockFhirId}`);
     return mockFhirId;
@@ -41,7 +39,6 @@ export class FhirService {
     this.logger.log(`FHIR appointment created (mock) with ID: ${mockId}`);
     return mockId;
   }
-
 
   // async createObservation(patientFhirId: string, observation: { code: string; value: number; unit: string }) {
   //   const fhirObservation = {

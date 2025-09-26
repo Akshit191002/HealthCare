@@ -73,9 +73,19 @@ export class AuthService {
         await user.save();
         await this.redisService.del(`otp:${dto.email}`);
 
-        return { message: `${record.role} registered successfully` };
-    }
+        const payload = { sub: user._id, email: user.email, role: user.role };
+        const accessToken = await this.jwtService.signAsync(payload);
+        const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
+        await this.redisService.set(`refresh_token:${user._id}`, refreshToken, 7 * 24 * 60 * 60);
+
+        return {
+            message: `${user.role} registered successfully`,
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            role: user.role,
+        };
+    }
 
     async login(dto: LoginDto) {
         const user = await this.authModel.findOne({ email: dto.email });
@@ -101,7 +111,12 @@ export class AuthService {
 
         await this.redisService.set(`refresh_token:${user._id}`, refreshToken, 7 * 24 * 60 * 60);
 
-        return { access_token: accessToken, refresh_token: refreshToken, role: user.role };
+        return {
+            message: `${user.role} registered successfully`,
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            role: user.role
+        };
     }
 
     async refreshToken(userId: string, token: string) {
@@ -196,13 +211,6 @@ export class AuthService {
 
     async logout(userId: string, accessToken: string) {
         await this.redisService.del(`refresh_token:${userId}`);
-        // const decoded: any = this.jwtService.decode(accessToken);
-        // if (decoded && decoded.exp) {
-        //     const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-        //     if (ttl > 0) {
-        //         await this.redisService.set(`blacklist_token:${accessToken}`, 'logout', ttl);
-        //     }
-        // }
         return { message: 'Logged out successfully' };
     }
 

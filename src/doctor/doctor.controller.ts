@@ -5,7 +5,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagg
 import { DoctorsService } from './doctor.service';
 import { RolesGuard } from 'src/utils/roles.guard';
 import { Roles } from 'src/utils/roles.decorator';
-import { AppointmentsService } from 'src/appointment/appointment.service';
+// import { AppointmentsService } from 'src/appointment/appointment.service';
 
 
 @ApiTags('Doctors')
@@ -15,7 +15,7 @@ import { AppointmentsService } from 'src/appointment/appointment.service';
 export class DoctorsController {
     constructor(
         private readonly doctorsService: DoctorsService,
-        private readonly appointmentsService: AppointmentsService
+        // private readonly appointmentsService: AppointmentsService
     ) { }
 
     @Roles('doctor')

@@ -5,7 +5,7 @@ import { encryptPHI, decryptPHI } from '../utils/encryption.util';
 import { FhirService } from '../fhir/fhir.service';
 import { Doctor, DoctorDocument } from './doctor.schema';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
-import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
+// import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
 import { PatientDocument } from 'src/patient/patient.schema';
 
 @Injectable()
@@ -14,7 +14,7 @@ export class DoctorsService {
 
     constructor(
         @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
-        @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
+        // @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
         private readonly fhirService: FhirService,
     ) { }
 

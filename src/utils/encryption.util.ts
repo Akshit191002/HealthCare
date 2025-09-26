@@ -1,17 +1,16 @@
 import * as crypto from 'crypto';
 
-// Derive a 32-byte key (AES-256 requires 32 bytes)
 const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'supersecretkey123', 'salt', 32);
 
 export function encryptPHI(data: string) {
-  const iv = crypto.randomBytes(12); // GCM usually uses 12-byte IV
+  const iv = crypto.randomBytes(12); 
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
   let encrypted = cipher.update(data, 'utf8', 'hex');
   encrypted += cipher.final('hex');
 
-  const tag = cipher.getAuthTag(); // authentication tag
-
+  const tag = cipher.getAuthTag();
+  
   return {
     encryptedData: encrypted,
     iv: iv.toString('hex'),

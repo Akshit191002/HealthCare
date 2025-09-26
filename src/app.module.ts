@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PatientsModule } from './patient/patients.module';
 import { AuthModule } from './auth/auth.module';
 import { DoctorsModule } from './doctor/doctor.module';
-import { AppointmentsModule } from './appointment/appointment.module';
+// import { AppointmentsModule } from './appointment/appointment.module';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { AppointmentsModule } from './appointment/appointment.module';
     }),
 
     MongooseModule.forRoot(process.env.MONGO_URI as string),
-    AuthModule, PatientsModule, DoctorsModule, AppointmentsModule
+    AuthModule, PatientsModule, DoctorsModule, //AppointmentsModule
   ],
 })
 export class AppModule { }
