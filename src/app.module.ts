@@ -14,7 +14,7 @@ import { AppointmentsModule } from './appointment/appointment.module';
     }),
 
     MongooseModule.forRoot(process.env.MONGO_URI as string),
-    PatientsModule, AuthModule, DoctorsModule, AppointmentsModule
+    AuthModule, PatientsModule, DoctorsModule, AppointmentsModule
   ],
 })
 export class AppModule { }

@@ -42,6 +42,7 @@ export class FhirService {
     return mockId;
   }
 
+
   // async createObservation(patientFhirId: string, observation: { code: string; value: number; unit: string }) {
   //   const fhirObservation = {
   //     resourceType: 'Observation',

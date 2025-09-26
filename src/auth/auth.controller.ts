@@ -5,18 +5,17 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from 'src/utils/jwt-auth.guard';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgetPasswordDto } from './dto/forget-password.dto';
-import { Roles } from 'src/utils/roles.decorator';
-import { RolesGuard } from 'src/utils/roles.guard';
+import { RefreshTokenDto } from './dto/refreshToken.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) { }
 
-  @Post('register')
+  @Post('signup')
   @ApiOperation({ summary: 'Register a new user and send OTP' })
   @ApiResponse({ status: 201, description: 'OTP sent successfully' })
   @ApiResponse({ status: 400, description: 'Bad request / Email already exists' })
@@ -70,7 +69,7 @@ export class AuthController {
   @Post('forget-password')
   @ApiOperation({ summary: 'Request OTP to reset password' })
   @ApiResponse({ status: 201, description: 'OTP sent to your email' })
-  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 400, description: 'Invalid Email' })
   async forgetPassword(@Body() dto: ForgetPasswordDto) {
     try {
       return await this.authService.forgetPassword(dto.email);
@@ -89,5 +88,27 @@ export class AuthController {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  @Post('refresh-token')
+  @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
+  @ApiResponse({ status: 200, description: 'New access token issued' })
+  @ApiResponse({ status: 400, description: 'Missing userId or refreshToken / Invalid token' })
+  async refresh(@Body() dto: RefreshTokenDto) {
+    if (!dto.userId || !dto.refreshToken) {
+      throw new BadRequestException('Missing userId or refreshToken');
+    }
+    return this.authService.refreshToken(dto.userId, dto.refreshToken);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('bearerAuth')
+  @ApiOperation({ summary: 'Logout user and invalidate access and refresh tokens' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async logout(@Req() req) {
+    const accessToken = req.headers.authorization?.replace('Bearer ', '');
+    return await this.authService.logout(req.user.userId, accessToken);
   }
 }

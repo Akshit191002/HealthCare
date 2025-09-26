@@ -53,12 +53,4 @@ export class PatientsController {
   getById(@Param('id') id: string, @Req() req) {
     return this.patientsService.getPatientById(id, req.user.userId);
   }
-
-  @Roles('patient')
-  @Get('myAppointment')
-  @ApiOperation({ summary: 'Get all appointments for logged-in patient' })
-  async myAppointments(@Req() req) {
-    return this.appointmentsService.getAppointmentsForPatient(req.user.userId);
-  }
-
 }

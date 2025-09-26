@@ -5,6 +5,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagg
 import { DoctorsService } from './doctor.service';
 import { RolesGuard } from 'src/utils/roles.guard';
 import { Roles } from 'src/utils/roles.decorator';
+import { AppointmentsService } from 'src/appointment/appointment.service';
 
 
 @ApiTags('Doctors')
@@ -12,7 +13,10 @@ import { Roles } from 'src/utils/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('doctors')
 export class DoctorsController {
-    constructor(private readonly doctorsService: DoctorsService) { }
+    constructor(
+        private readonly doctorsService: DoctorsService,
+        private readonly appointmentsService: AppointmentsService
+    ) { }
 
     @Roles('doctor')
     @Post()
@@ -43,6 +47,19 @@ export class DoctorsController {
     }
 
     @Roles('doctor')
+    @Get()
+    @ApiOperation({ summary: 'Get all doctors' })
+    @ApiResponse({ status: 200, description: 'Doctors list retrieved successfully.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
+    async getAll() {
+        try {
+            return await this.doctorsService.getAllDoctors();
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
+    }
+
+    @Roles('doctor')
     @Get(':id')
     @ApiOperation({ summary: 'Get doctor by ID' })
     @ApiResponse({ status: 200, description: 'Doctor retrieved successfully.' })
@@ -56,16 +73,4 @@ export class DoctorsController {
         }
     }
 
-    @Roles('doctor')
-    @Get()
-    @ApiOperation({ summary: 'Get all doctors' })
-    @ApiResponse({ status: 200, description: 'Doctors list retrieved successfully.' })
-    @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async getAll() {
-        try {
-            return await this.doctorsService.getAllDoctors();
-        } catch (error) {
-            throw new BadRequestException(error.message);
-        }
-    }
 }

@@ -22,12 +22,16 @@ export class AuthService {
     ) { }
 
     async register(dto: RegisterDto) {
+        await this.redisService.rateLimit(`otp_limit:${dto.email}`, 3, 900,
+            new BadRequestException('Too many OTP requests. Please try again after 15 minutes.')
+        );
         const existing = await this.authModel.findOne({ email: dto.email });
         if (existing) throw new ConflictException('Email already exists');
 
         const otp = generateOtp();
 
-        await this.redisService.set(`otp:${dto.email}`, { otp, password: dto.password, role: dto.role ?? 'patient' }, 300);
+        const hashed = await bcrypt.hash(dto.password, 10);
+        await this.redisService.set(`otp:${dto.email}`, { otp, password: hashed, role: dto.role ?? 'patient' }, 300);
 
         await sendOtpEmail(dto.email, otp);
 
@@ -35,27 +39,48 @@ export class AuthService {
     }
 
     async verifyOtp(dto: VerifyOtpDto) {
-        const record = await this.redisService.get<{ otp: string; password: string, role: string }>(`otp:${dto.email}`);
+        const record = await this.redisService.get<{ otp: string; password: string; role: string; attempts?: number }>(
+            `otp:${dto.email}`
+        );
+
         if (!record) throw new BadRequestException('No OTP found or expired');
 
-        if (record.otp !== dto.otp) throw new BadRequestException('Invalid OTP');
+        const attempts = record.attempts ?? 0;
 
-        const hashed = await bcrypt.hash(record.password, 10);
+        if (record.otp !== dto.otp) {
+            const newAttempts = attempts + 1;
+
+            if (newAttempts >= 3) {
+                await this.redisService.del(`otp:${dto.email}`);
+                throw new BadRequestException('Too many invalid attempts. OTP expired.');
+            }
+
+            await this.redisService.set(
+                `otp:${dto.email}`,
+                { ...record, attempts: newAttempts },
+                300
+            );
+
+            throw new BadRequestException(`Invalid OTP. Attempts left: ${3 - newAttempts}`);
+        }
 
         const user = new this.authModel({
             email: dto.email,
-            password: hashed,
-            role: record.role
+            password: record.password,
+            role: record.role,
         });
 
         await user.save();
-
         await this.redisService.del(`otp:${dto.email}`);
 
         return { message: `${record.role} registered successfully` };
     }
 
+
     async login(dto: LoginDto) {
+        await this.redisService.rateLimit(`login_limit:${dto.email}`, 3, 86400,
+            new BadRequestException('Too many OTP requests. Please try again after 24 hours.')
+        );
         const user = await this.authModel.findOne({ email: dto.email });
         if (!user) throw new UnauthorizedException('Invalid credentials');
 
@@ -63,10 +88,32 @@ export class AuthService {
         if (!isMatch) throw new UnauthorizedException('Invalid credentials');
 
         const payload = { sub: user._id, email: user.email, role: user.role };
-        const token = await this.jwtService.signAsync(payload);
+        const accessToken = await this.jwtService.signAsync(payload);
+        const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
-        return { access_token: token, role: user.role };
+        await this.redisService.set(`refresh_token:${user._id}`, refreshToken, 7 * 24 * 60 * 60);
+
+        return { access_token: accessToken, refresh_token: refreshToken, role: user.role };
     }
+
+    async refreshToken(userId: string, token: string) {
+        const storedToken = await this.redisService.get(`refresh_token:${userId}`);
+        if (!storedToken || storedToken !== token) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        const user = await this.authModel.findById(userId);
+        if (!user) throw new UnauthorizedException('User not found');
+
+        const payload = { sub: user._id, email: user.email, role: user.role };
+        const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+        const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+        await this.redisService.set(`refresh_token:${user._id}`, refreshToken, 7 * 24 * 60 * 60);
+
+        return { access_token: accessToken, refresh_token: refreshToken };
+    }
+
 
     async changePassword(userId: string, dto: ChangePasswordDto) {
         const user = await this.authModel.findById(userId);
@@ -83,8 +130,11 @@ export class AuthService {
     }
 
     async forgetPassword(email: string) {
+        await this.redisService.rateLimit(`otp_limit:${email}`, 3, 900,
+            new BadRequestException('Too many OTP requests. Please try again after 15 minutes.')
+        );
         const user = await this.authModel.findOne({ email });
-        if (!user) throw new NotFoundException('User not found');
+        if (!user) throw new BadRequestException('Invalid email');
 
         const otp = generateOtp();
         await this.redisService.set(`forget:${email}`, { otp, userId: user._id }, 300);
@@ -95,13 +145,37 @@ export class AuthService {
     }
 
     async resetPassword(email: string, otp: string, newPassword: string) {
-        const record = await this.redisService.get<{ otp: string; userId: string }>(`forget:${email}`);
+        const record = await this.redisService.get<{ otp: string; userId: string; attempts?: number }>(
+            `forget:${email}`
+        );
         if (!record) throw new BadRequestException('OTP expired or invalid');
 
-        if (record.otp !== otp) throw new BadRequestException('Invalid OTP');
+        const attempts = record.attempts ?? 0;
+
+        if (record.otp !== otp) {
+            const newAttempts = attempts + 1;
+
+            if (newAttempts >= 3) {
+                await this.redisService.del(`forget:${email}`);
+                throw new BadRequestException('Too many invalid attempts. OTP expired.');
+            }
+
+            await this.redisService.set(
+                `forget:${email}`,
+                { ...record, attempts: newAttempts },
+                300
+            );
+
+            throw new BadRequestException(`Invalid OTP. Attempts left: ${3 - newAttempts}`);
+        }
 
         const user = await this.authModel.findById(record.userId);
         if (!user) throw new NotFoundException('User not found');
+
+        const isSamePassword = await bcrypt.compare(newPassword, user.password);
+        if (isSamePassword) {
+            throw new BadRequestException('New password cannot be the same as the old password');
+        }
 
         const hashed = await bcrypt.hash(newPassword, 10);
         user.password = hashed;
@@ -111,4 +185,17 @@ export class AuthService {
 
         return { message: 'Password reset successfully' };
     }
+
+    async logout(userId: string, accessToken: string) {
+        await this.redisService.del(`refresh_token:${userId}`);
+        const decoded: any = this.jwtService.decode(accessToken);
+        if (decoded && decoded.exp) {
+            const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+            if (ttl > 0) {
+                await this.redisService.set(`blacklist_token:${accessToken}`, 'logout', ttl);
+            }
+        }
+        return { message: 'Logged out successfully' };
+    }
+
 }

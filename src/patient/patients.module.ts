@@ -12,7 +12,7 @@ import { AppointmentsService } from 'src/appointment/appointment.service';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Patient.name, schema: PatientSchema }]),
-    AuthModule,DoctorsModule
+    AuthModule,DoctorsModule,AppointmentsModule
   ],
   providers: [PatientsService, FhirService],
   controllers: [PatientsController],

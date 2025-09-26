@@ -5,6 +5,8 @@ import { FhirService } from '../fhir/fhir.service';
 import { encryptPHI, decryptPHI } from '../utils/encryption.util';
 import { Patient, PatientDocument } from './patient.schema';
 import { RegisterPatientDto } from './dto/register-patient.dto';
+import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
+import { DoctorDocument } from 'src/doctor/doctor.schema';
 
 @Injectable()
 export class PatientsService {
@@ -12,6 +14,7 @@ export class PatientsService {
 
   constructor(
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
+    @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private fhirService: FhirService,
   ) { }
 
@@ -57,7 +60,7 @@ export class PatientsService {
       return {
         id: p._id,
         fhirId: p.fhirId,
-        localData: decryptedData,
+        data: decryptedData,
       };
     });
 
@@ -67,7 +70,7 @@ export class PatientsService {
 
 
   async getPatientById(id: string, userId: string) {
-    const patient = await this.patientModel.findOne({ _id: id, user: userId }); // 👈 ensure ownership
+    const patient = await this.patientModel.findOne({ _id: id, user: userId });
     if (!patient) throw new Error('Patient not found or not authorized');
 
     const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
@@ -88,10 +91,8 @@ export class PatientsService {
     return {
       id: patient._id,
       fhirId: patient.fhirId,
-      localData: decryptedData,
+      data: decryptedData,
     };
   }
-
-  async getAllDoctor() { }
 
 }

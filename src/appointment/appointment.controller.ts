@@ -22,4 +22,18 @@ export class AppointmentsController {
         return this.appointmentsService.createAppointment(dto, req.user.userId);
     }
 
+    @Roles('doctor')
+    @Get('docAppointment')
+    @ApiOperation({ summary: 'Get all appointments for logged-in doctor' })
+    async docAppointments(@Req() req) {
+        return this.appointmentsService.getAppointmentsForDoctor(req.user.userId);
+    }
+
+    @Roles('patient')
+    @Get('patAppointment')
+    @ApiOperation({ summary: 'Get all appointments for logged-in patient' })
+    async patAppointments(@Req() req) {
+        return this.appointmentsService.getAppointmentsForPatient(req.user.userId);
+    }
+
 }

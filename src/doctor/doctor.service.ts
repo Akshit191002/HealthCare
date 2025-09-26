@@ -5,6 +5,8 @@ import { encryptPHI, decryptPHI } from '../utils/encryption.util';
 import { FhirService } from '../fhir/fhir.service';
 import { Doctor, DoctorDocument } from './doctor.schema';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
+import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
+import { PatientDocument } from 'src/patient/patient.schema';
 
 @Injectable()
 export class DoctorsService {
@@ -12,6 +14,7 @@ export class DoctorsService {
 
     constructor(
         @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
+        @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
         private readonly fhirService: FhirService,
     ) { }
 
@@ -54,7 +57,7 @@ export class DoctorsService {
         return {
             id: doctor._id,
             fhirId: doctor.fhirId,
-            localData: decryptedData,
+            data: decryptedData,
         };
     }
 
@@ -63,7 +66,7 @@ export class DoctorsService {
         if (!doctor) throw new NotFoundException('Doctor not found for this user');
 
         const decryptedData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
-        return { id: doctor._id, fhirId: doctor.fhirId, localData: decryptedData };
+        return { id: doctor._id, fhirId: doctor.fhirId, data: decryptedData };
     }
 
     async getAllDoctors() {
@@ -73,7 +76,7 @@ export class DoctorsService {
         return doctors.map((doc) => ({
             id: doc._id,
             fhirId: doc.fhirId,
-            localData: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
+            data: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
         }));
     }
 
@@ -81,6 +84,6 @@ export class DoctorsService {
         const doctor = await this.doctorModel.findOne({ user: userId });
         if (!doctor) throw new NotFoundException('Doctor not found');
         const decryptedData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
-        return { id: doctor._id, fhirId: doctor.fhirId, localData: decryptedData };
+        return { id: doctor._id, fhirId: doctor.fhirId, data: decryptedData };
     }
 }
