@@ -78,15 +78,23 @@ export class AuthService {
 
 
     async login(dto: LoginDto) {
-        await this.redisService.rateLimit(`login_limit:${dto.email}`, 3, 86400,
-            new BadRequestException('Too many OTP requests. Please try again after 24 hours.')
-        );
         const user = await this.authModel.findOne({ email: dto.email });
-        if (!user) throw new UnauthorizedException('Invalid credentials');
+        if (!user) {
+            await this.redisService.rateLimit(`login_limit:${dto.email}`, 3, 24 * 60 * 60,
+                new UnauthorizedException('Too many login request. Please try again after 24 hours.')
+            );
+            throw new UnauthorizedException('Invalid credentials')
+        };
 
         const isMatch = await bcrypt.compare(dto.password, user.password);
-        if (!isMatch) throw new UnauthorizedException('Invalid credentials');
+        if (!isMatch) {
+            await this.redisService.rateLimit(`login_limit:${dto.email}`, 3, 24 * 60 * 60,
+                new UnauthorizedException('Too many login request. Please try again after 24 hours.')
+            );
+            throw new UnauthorizedException('Invalid credentials')
+        };
 
+        await this.redisService.del(`login_limit:${dto.email}`);
         const payload = { sub: user._id, email: user.email, role: user.role };
         const accessToken = await this.jwtService.signAsync(payload);
         const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
@@ -188,13 +196,13 @@ export class AuthService {
 
     async logout(userId: string, accessToken: string) {
         await this.redisService.del(`refresh_token:${userId}`);
-        const decoded: any = this.jwtService.decode(accessToken);
-        if (decoded && decoded.exp) {
-            const ttl = decoded.exp - Math.floor(Date.now() / 1000);
-            if (ttl > 0) {
-                await this.redisService.set(`blacklist_token:${accessToken}`, 'logout', ttl);
-            }
-        }
+        // const decoded: any = this.jwtService.decode(accessToken);
+        // if (decoded && decoded.exp) {
+        //     const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+        //     if (ttl > 0) {
+        //         await this.redisService.set(`blacklist_token:${accessToken}`, 'logout', ttl);
+        //     }
+        // }
         return { message: 'Logged out successfully' };
     }
 
