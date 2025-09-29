@@ -1,244 +1,154 @@
-// import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-// import { InjectModel } from '@nestjs/mongoose';
-// import { Model, Types } from 'mongoose';
-// import { Appointment, AppointmentDocument } from './appointment.schema';
-// import { FhirService } from '../fhir/fhir.service';
-// import { CreateAppointmentDto } from './dto/createAppointment.dto';
-// import { Patient, PatientDocument } from 'src/patient/patient.schema';
-// import { Doctor, DoctorDocument } from 'src/doctor/doctor.schema';
-// import { decryptPHI } from 'src/utils/encryption.util';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { decryptPHI } from '../utils/encryption.util';
+import { Appointment, AppointmentDocument, AppointmentStatus } from './appointment.schema';
+import { Patient, PatientDocument } from 'src/patient/patient.schema';
+import { Doctor, DoctorDocument } from 'src/doctor/doctor.schema';
+import { sendEmail } from 'src/utils/email.util';
+import { Auth, AuthDocument } from 'src/auth/auth.schema';
 
-// @Injectable()
-// export class AppointmentsService {
-//   constructor(
-//     @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
-//     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
-//     @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
-//     private readonly fhirService: FhirService,
-//   ) { }
+@Injectable()
+export class AppointmentService {
+    constructor(
+        @InjectModel(Appointment.name) private readonly appointmentModel: Model<AppointmentDocument>,
+        @InjectModel(Auth.name) private authModel: Model<AuthDocument>,
+        @InjectModel(Patient.name) private readonly patientModel: Model<PatientDocument>,
+        @InjectModel(Doctor.name) private readonly doctorModel: Model<DoctorDocument>,
+    ) { }
 
-//   async getMyPatient(userId: string) {
-//     const patient = await this.patientModel.findOne({ user: userId });
-//     if (!patient) throw new NotFoundException('Patient not found for this user');
-//     const decryptedData = JSON.parse(decryptPHI(patient.encryptedData, patient.iv, patient.tag));
-//     return {
-//       id: patient._id,
-//       fhirId: patient.fhirId,
-//       data: decryptedData,
-//     };
-//   }
 
-//   async getDoctorByUserId(userId: string) {
-//     const doctor = await this.doctorModel.findOne({ user: userId });
-//     if (!doctor) throw new NotFoundException('Doctor not found');
-//     const decryptedData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
-//     return {
-//       id: doctor._id,
-//       fhirId: doctor.fhirId,
-//       data: decryptedData
-//     };
-//   }
+    async bookAppointment(userId: string, patientEntryId: string, doctorId: string, date: string, startTime: string, endTime: string, reason?: string,) {
+        const userObjectId = new Types.ObjectId(userId);
+        const patientEntry = await this.patientModel.findOne(
+            { user: userObjectId, 'patients._id': patientEntryId },
+            { 'patients.$': 1 }
+        );
+        if (!patientEntry) throw new BadRequestException('Selected patient member not found');
 
-//   private async findNextAvailableSlot(doctorId: string): Promise<Date> {
-//     let currentDate = new Date();
-//     currentDate.setHours(9, 0, 0, 0);
+        const doctor = await this.doctorModel.findById(doctorId);
+        if (!doctor) throw new NotFoundException('Doctor not found');
 
-//     while (true) {
-//       const dayStart = new Date(currentDate);
-//       dayStart.setHours(0, 0, 0, 0);
+        const doctorData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
 
-//       const dayEnd = new Date(currentDate);
-//       dayEnd.setHours(23, 59, 59, 999);
+        const appointmentDate = new Date(date);
 
-//       const dailyAppointments = await this.appointmentModel.find({
-//         doctor: doctorId,
-//         date: { $gte: dayStart, $lte: dayEnd },
-//         status: 'scheduled',
-//       }).sort({ date: 1 });
+        const dailyAppointments = await this.appointmentModel.find({
+            doctor: doctorId,
+            date: appointmentDate,
+            status: { $in: [AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED] },
+        });
 
-//       if (dailyAppointments.length < 10) {
-//         for (let hour = 9; hour <= 18; hour++) {
-//           const slot = new Date(dayStart);
-//           slot.setHours(hour, 0, 0, 0);
-//           if (!dailyAppointments.some(a => a.date && a.date.getTime() === slot.getTime())) {
-//             return slot;
-//           }
-//         }
-//       }
-//       currentDate.setDate(currentDate.getDate() + 1);
-//     }
-//   }
+        if (dailyAppointments.length >= 10) {
+            throw new BadRequestException('Doctor reached maximum appointments for this day. Please select another date.');
+        }
 
-//   // async createAppointment(dto: CreateAppointmentDto, patientUserId: string) {
-//   //   const patient = await this.getMyPatient(patientUserId);
-//   //   if (!patient) throw new NotFoundException('Patient not found for this user');
-//   //   const patientfhirId = patient.fhirId
+        const timeConflict = dailyAppointments.find(a => a.startTime === startTime);
+        if (timeConflict) {
+            const suggestedSlot = this.suggestNextSlot(dailyAppointments, startTime);
+            throw new BadRequestException(`Doctor is busy at this time. Next available slot: ${suggestedSlot}`);
+        }
 
-//   //   const doctor = await this.getDoctorByUserId(dto.doctorId);
-//   //   if (!doctor) throw new NotFoundException('Doctor not found');
-//   //   const doctorfhirId = doctor.fhirId
+        const appointment = await this.appointmentModel.create({
+            patient: userObjectId,
+            patientEntryId: new Types.ObjectId(patientEntryId),
+            doctor: new Types.ObjectId(doctorId),
+            date: appointmentDate,
+            startTime,
+            endTime,
+            status: AppointmentStatus.PENDING,
+            fee: doctorData.fee || 0,
+            reason,
+            doctorLocation: doctorData.address?.city,
+        });
 
-//   //   const fhirAppointmentId = await this.fhirService.createAppointment({
-//   //     patientFhirId: patientfhirId,
-//   //     doctorFhirId: doctorfhirId,
-//   //     date: dto.date,
-//   //     notes: dto.notes,
-//   //   });
+        await sendEmail({
+            to: doctorData.email,
+            subject: 'New Appointment Request',
+            text: `You have a new appointment request appointmentId is ${appointment._id}. Please accept or reject.`,
+        });
 
-//   //   const appointment = new this.appointmentModel({
-//   //     patient: new Types.ObjectId(patient.id),
-//   //     doctor: new Types.ObjectId(dto.doctorId),
-//   //     date: dto.date,
-//   //     status: 'scheduled',
-//   //     notes: dto.notes,
-//   //     fhirId: fhirAppointmentId,
-//   //     patientFhirId: patientfhirId,
-//   //     doctorFhirId: doctorfhirId,
-//   //   });
+        return appointment;
+    }
+    private suggestNextSlot(existingAppointments: AppointmentDocument[], startTime: string) {
+        const [hour, minute] = startTime.split(':').map(Number);
+        let requestedMinutes = hour * 60 + minute;
 
-//   //   await appointment.save();
+        const busySlots = existingAppointments.map(a => {
+            const [sHour, sMin] = a.startTime.split(':').map(Number);
+            const [eHour, eMin] = a.endTime.split(':').map(Number);
+            return { start: sHour * 60 + sMin, end: eHour * 60 + eMin };
+        }).sort((a, b) => a.start - b.start);
 
-//   //   return {
-//   //     id: appointment._id,
-//   //     fhirId: fhirAppointmentId,
-//   //     status: appointment.status,
-//   //     date: appointment.date,
-//   //     notes: appointment.notes,
-//   //     doctorId: dto.doctorId,
-//   //   };
-//   // }
+        while (true) {
+            const conflict = busySlots.some(slot => requestedMinutes < slot.end && requestedMinutes + 30 > slot.start);
+            if (!conflict) break;
+            requestedMinutes += 30;
+        }
 
-//   async createAppointment(dto: CreateAppointmentDto, patientUserId: string) {
-//     const patient = await this.getMyPatient(patientUserId);
+        const nextHour = Math.floor(requestedMinutes / 60);
+        const nextMinute = requestedMinutes % 60;
 
-//     const existingAppointment = await this.appointmentModel.findOne({
-//       patient: patient.id,
-//       status: 'scheduled',
-//     });
+        const hh = nextHour.toString().padStart(2, '0');
+        const mm = nextMinute.toString().padStart(2, '0');
 
-//     if (existingAppointment) {
-//       throw new BadRequestException(
-//         'You already have an active appointment. Please complete or cancel it before booking a new one.'
-//       );
-//     }
+        return `${hh}:${mm}`;
+    }
 
-//     const doctor = await this.getDoctorByUserId(dto.doctorId);
 
-//     let appointmentDate: Date;
+    async respondAppointment(
+        appointmentId: string,
+        action: 'ACCEPT' | 'REJECT' | 'RESCHEDULE',
+        newDate?: string,
+        newStartTime?: string,
+        newEndTime?: string,
+    ) {
+        const appointment = await this.appointmentModel.findById(appointmentId);
+        if (!appointment) throw new NotFoundException('Appointment not found');
 
-//     if (dto.date) {
-//       appointmentDate = new Date(dto.date);
+        if (action === 'ACCEPT') appointment.status = AppointmentStatus.ACCEPTED;
+        else if (action === 'REJECT') appointment.status = AppointmentStatus.REJECTED;
+        else if (action === 'RESCHEDULE') {
+            if (!newDate || !newStartTime || !newEndTime)
+                throw new BadRequestException('New date and time must be provided for reschedule');
+            appointment.status = AppointmentStatus.RESCHEDULED;
+            appointment.date = new Date(newDate);
+            appointment.startTime = newStartTime;
+            appointment.endTime = newEndTime;
+        }
 
-//       const doctorAppointmentsCount = await this.appointmentModel.countDocuments({
-//         doctor: doctor.id,
-//         date: {
-//           $gte: new Date(appointmentDate.setHours(0, 0, 0, 0)),
-//           $lte: new Date(appointmentDate.setHours(23, 59, 59, 999)),
-//         },
-//       });
+        await appointment.save();
 
-//       if (doctorAppointmentsCount >= 10) {
-//         throw new BadRequestException(
-//           'Doctor is fully booked on this date. Please choose another date.'
-//         );
-//       }
-//     } else {
-//       appointmentDate = await this.findNextAvailableSlot(doctor.id);
-//     }
+        const patientUser = await this.authModel.findById(appointment.patient);
+        if (!patientUser) throw new NotFoundException('Patient not found');
 
-//     const fhirAppointmentId = await this.fhirService.createAppointment({
-//       patientFhirId: patient.fhirId,
-//       doctorFhirId: doctor.fhirId,
-//       date: appointmentDate.toISOString(),
-//       notes: dto.notes,
-//     });
+        const doctor = await this.doctorModel.findById(appointment.doctor);
+        if (!doctor) throw new NotFoundException('Doctor not found');
+        const doctorData = JSON.parse(decryptPHI(doctor.encryptedData, doctor.iv, doctor.tag));
 
-//     const appointment = new this.appointmentModel({
-//       patient: patient.id,
-//       doctor: doctor.id,
-//       date: appointmentDate,
-//       status: 'scheduled',
-//       notes: dto.notes,
-//       fhirId: fhirAppointmentId,
-//       patientFhirId: patient.fhirId,
-//       doctorFhirId: doctor.fhirId,
-//     });
+        const patientEmail = patientUser.email;
 
-//     await appointment.save();
+        await sendEmail({
+            to: patientEmail,
+            subject: `Your appointment has been ${appointment.status.toLowerCase()}`,
+            text: `Appointment with Dr. ${doctorData.firstName} ${doctorData.lastName} has been ${appointment.status}.
+Date: ${appointment.date} 
+Time: ${appointment.startTime} - ${appointment.endTime}`,
+        });
 
-//     return {
-//       id: appointment._id,
-//       fhirId: fhirAppointmentId,
-//       status: appointment.status,
-//       date: appointment.date,
-//       notes: appointment.notes,
-//       doctorId: dto.doctorId,
-//     };
-//   }
+        return appointment;
+    }
 
-//   async getAppointmentsForDoctor(doctorUserId: string) {
-//     const doctor = await this.getDoctorByUserId(doctorUserId);
+    async getAppointments(userId: string, role: 'doctor' | 'patient') {
+        if (role === 'doctor') {
+            const doctor = await this.doctorModel.findOne({ user: userId });
+            if (!doctor) throw new NotFoundException('Doctor not found');
+            return this.appointmentModel.find({ doctor: doctor._id }).sort({ date: 1, startTime: 1 });
+        } else {
+            const patient = await this.patientModel.findOne({ user: userId });
+            if (!patient) throw new NotFoundException('Patient not found');
+            return this.appointmentModel.find({ patient: patient._id }).sort({ date: 1, startTime: 1 });
+        }
+    }
 
-//     const appointments = await this.appointmentModel
-//       .find({ doctor: doctor.id })
-//       .populate<{ patient: PatientDocument }>('patient')
-//       .exec();
-
-//     if (appointments.length === 0) {
-//       throw new NotFoundException('No Available Appointment');
-//     }
-//     return appointments.map(app => {
-//       const decryptedPatient = JSON.parse(
-//         decryptPHI(app.patient.encryptedData, app.patient.iv, app.patient.tag)
-//       );
-
-//       return {
-//         id: app._id,
-//         date: app.date,
-//         status: app.status,
-//         notes: app.notes,
-//         fhirId: app.fhirId,
-//         patientFhirId: app.patientFhirId,
-//         doctorFhirId: app.doctorFhirId,
-//         patient: {
-//           id: app.patient._id,
-//           ...decryptedPatient,
-//         },
-//       };
-//     });
-//   }
-
-//   async getAppointmentsForPatient(patientUserId: string) {
-//     const patient = await this.getMyPatient(patientUserId);
-
-//     const appointments = await this.appointmentModel
-//       .find({ patient: patient.id })
-//       .populate<{ doctor: DoctorDocument }>('doctor')
-//       .exec();
-
-//     if (appointments.length === 0) {
-//       throw new NotFoundException('No Available Appointment');
-//     }
-
-//     return appointments.map(app => {
-//       const decryptedDoctor = JSON.parse(
-//         decryptPHI(app.doctor.encryptedData, app.doctor.iv, app.doctor.tag)
-//       );
-
-//       return {
-//         id: app._id,
-//         date: app.date,
-//         status: app.status,
-//         notes: app.notes,
-//         fhirId: app.fhirId,
-//         doctorFhirId: app.doctorFhirId,
-//         patientFhirId: app.patientFhirId,
-//         doctor: {
-//           id: app.doctor._id,
-//           ...decryptedDoctor,
-//         },
-//       };
-//     });
-//   }
-
-// }
+}

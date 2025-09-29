@@ -1,8 +1,8 @@
-import { Controller, Post, Body, Get, Param, Req, UseGuards, Patch } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Req, UseGuards, Patch, Delete, Query } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { JwtAuthGuard } from 'src/utils/jwt-auth.guard';
-import { RegisterPatientDto } from './dto/register-patient.dto';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { BloodGroup, Gender, RegisterPatientDto } from './dto/register-patient.dto';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { RolesGuard } from 'src/utils/roles.guard';
 import { Roles } from 'src/utils/roles.decorator';
 import { DoctorsService } from 'src/doctor/doctor.service';
@@ -27,13 +27,44 @@ export class PatientsController {
     return await this.patientsService.registerPatient(dto, req.user.userId);
   }
 
+  // @Roles('patient')
+  // @Get()
+  // @ApiOperation({ summary: 'Get All Patient' })
+  // @ApiResponse({ status: 201, description: 'Patient list retrieved successfully' })
+  // @ApiResponse({ status: 400, description: 'Internal server error' })
+  // async getAll() {
+  //   return await this.patientsService.getAllPatients();
+  // }
+
   @Roles('patient')
   @Get()
-  @ApiOperation({ summary: 'Get All Patient' })
-  @ApiResponse({ status: 201, description: 'Patient list retrieved successfully' })
+  @ApiOperation({ summary: 'Get All Patients with filters and pagination' })
+  @ApiResponse({ status: 200, description: 'Patient list retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Internal server error' })
-  async getAll() {
-    return await this.patientsService.getAllPatients();
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number for pagination (default is 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of patients per page (default is 10)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search patients by first name or last name' })
+  @ApiQuery({ name: 'gender', required: false, enum: Gender, description: 'Filter patients by gender (Male, Female, Other)' })
+  @ApiQuery({ name: 'bloodGroup', required: false, enum: BloodGroup, description: 'Filter patients by blood group (A+, A-, B+, B-, AB+, AB-, O+, O-)' })
+  @ApiQuery({ name: 'heightFrom', required: false, type: Number, description: 'Filter patients with height greater than or equal to this value (in cm)' })
+  @ApiQuery({ name: 'heightTo', required: false, type: Number, description: 'Filter patients with height less than or equal to this value (in cm)' })
+  @ApiQuery({ name: 'weightFrom', required: false, type: Number, description: 'Filter patients with weight greater than or equal to this value (in kg)' })
+  @ApiQuery({ name: 'weightTo', required: false, type: Number, description: 'Filter patients with weight less than or equal to this value (in kg)' })
+
+  async getAll(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Query('gender') gender?: string,
+    @Query('bloodGroup') bloodGroup?: string,
+    @Query('heightFrom') heightFrom?: number,
+    @Query('heightTo') heightTo?: number,
+    @Query('weightFrom') weightFrom?: number,
+    @Query('weightTo') weightTo?: number,
+  ) {
+    return await this.patientsService.getAllPatients({
+      page, limit, search, gender, bloodGroup, heightFrom, heightTo, weightFrom, weightTo,
+    });
   }
 
   @Roles('patient')
@@ -45,14 +76,14 @@ export class PatientsController {
     return await this.patientsService.getMyPatient(req.user.userId);
   }
 
-  @Roles('patient')
-  @Get('doctors')
-  @ApiOperation({ summary: 'Get all doctors' })
-  @ApiResponse({ status: 200, description: 'Doctors list retrieved successfully.' })
-  @ApiResponse({ status: 500, description: 'Internal server error.' })
-  async getAllDoc() {
-    return await this.doctorsService.getAllDoctors();
-  }
+  // @Roles('patient')
+  // @Get('doctors')
+  // @ApiOperation({ summary: 'Get all doctors' })
+  // @ApiResponse({ status: 200, description: 'Doctors list retrieved successfully.' })
+  // @ApiResponse({ status: 500, description: 'Internal server error.' })
+  // async getAllDoc() {
+  //   return await this.doctorsService.getAllDoctors();
+  // }
 
   @Roles('patient')
   @Get(':id')
@@ -69,7 +100,27 @@ export class PatientsController {
   @ApiOperation({ summary: 'Partial update patient details (only if belongs to current user)' })
   @ApiResponse({ status: 200, description: 'Patient details updated successfully' })
   @ApiResponse({ status: 404, description: 'Patient not found or unauthorized' })
-  async updateDetails(@Param('id') patientId: string, @Req() req,@Body() updateDto: UpdatePatientDto) {
+  async updateDetails(@Param('id') patientId: string, @Req() req, @Body() updateDto: UpdatePatientDto) {
     return await this.patientsService.updateDeatils(req.user.userId, patientId, updateDto);
   }
+
+  @Roles('patient')
+  @Delete('all')
+  @ApiOperation({ summary: 'Soft delete patient accounts for the current user' })
+  @ApiResponse({ status: 200, description: 'patient accounts deleted successfully' })
+  @ApiResponse({ status: 404, description: 'No patient accounts found to delete' })
+  async deleteAllPatients(@Req() req) {
+    return await this.patientsService.deletePatients(req.user.userId);
+  }
+
+  @Roles('patient')
+  @Delete(':id')
+  @ApiOperation({ summary: 'Remove patient account for the current user' })
+  @ApiResponse({ status: 200, description: 'Patient account deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Patient not found or unauthorized' })
+  async deletePatient(@Req() req, @Param('id') patientId: string) {
+    return await this.patientsService.removePatient(req.user.userId, patientId);
+  }
+
+
 }

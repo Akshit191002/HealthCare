@@ -8,9 +8,10 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RedisService } from 'src/redis/redis.service';
 import { generateOtp } from 'src/utils/otp.util';
-import { sendOtpEmail } from 'src/utils/email.util';
+// import { sendOtpEmail } from 'src/utils/email.util';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { sendEmail } from 'src/utils/email.util';
 
 
 @Injectable()
@@ -33,7 +34,12 @@ export class AuthService {
         const hashed = await bcrypt.hash(dto.password, 10);
         await this.redisService.set(`otp:${dto.email}`, { otp, password: hashed, role: dto.role ?? 'patient' }, 300);
 
-        await sendOtpEmail(dto.email, otp);
+        // await sendOtpEmail(dto.email, otp);
+        await sendEmail({
+            to: dto.email,
+            subject: 'Your OTP Code',
+            text: `Your OTP code is: ${otp}. It will expire in 5 minutes.`,
+        });
 
         return { message: 'OTP sent to your email', email: dto.email };
     }
@@ -162,8 +168,13 @@ export class AuthService {
         const otp = generateOtp();
         await this.redisService.set(`forget:${email}`, { otp, userId: user._id }, 300);
 
-        await sendOtpEmail(email, otp);
+        // await sendOtpEmail(email, otp);
 
+        await sendEmail({
+            to: email,
+            subject: 'Your OTP Code',
+            text: `Your OTP code is: ${otp}. It will expire in 5 minutes.`,
+        });
         return { message: 'OTP sent to your email' };
     }
 

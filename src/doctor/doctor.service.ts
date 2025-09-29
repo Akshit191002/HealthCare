@@ -1,12 +1,10 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { FilterQuery, Model } from 'mongoose';
 import { encryptPHI, decryptPHI } from '../utils/encryption.util';
 import { FhirService } from '../fhir/fhir.service';
 import { Doctor, DoctorDocument } from './doctor.schema';
 import { RegisterDoctorDto } from './dto/register-doctor.dto';
-// import { Appointment, AppointmentDocument } from 'src/appointment/appointment.schema';
-import { PatientDocument } from 'src/patient/patient.schema';
 
 @Injectable()
 export class DoctorsService {
@@ -14,7 +12,6 @@ export class DoctorsService {
 
     constructor(
         @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
-        // @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
         private readonly fhirService: FhirService,
     ) { }
 
@@ -61,7 +58,7 @@ export class DoctorsService {
         };
     }
 
-    async getMyDoctor(userId: string) {
+    async getMyAccount(userId: string) {
         const doctor = await this.doctorModel.findOne({ user: userId });
         if (!doctor) throw new NotFoundException('Doctor not found for this user');
 
@@ -69,15 +66,60 @@ export class DoctorsService {
         return { id: doctor._id, fhirId: doctor.fhirId, data: decryptedData };
     }
 
-    async getAllDoctors() {
-        const doctors = await this.doctorModel.find();
-        if (!doctors.length) throw new NotFoundException('No doctors found');
+    // async getAllDoctors() {
+    //     const doctors = await this.doctorModel.find();
+    //     if (!doctors.length) throw new NotFoundException('No doctors found');
 
-        return doctors.map((doc) => ({
-            id: doc._id,
-            fhirId: doc.fhirId,
-            data: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
-        }));
+    //     return doctors.map((doc) => ({
+    //         id: doc._id,
+    //         fhirId: doc.fhirId,
+    //         data: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
+    //     }));
+    // }
+
+    async getAllDoctors(
+        page: number = 1, limit: number = 10, search?: string, gender?: string, specialization?: string, city?: string, state?: string, country?: string,) {
+        const query: FilterQuery<any> = {};
+
+        if (search) {
+            query.$or = [
+                { 'decryptedData.firstName': { $regex: search, $options: 'i' } },
+                { 'decryptedData.lastName': { $regex: search, $options: 'i' } },
+                { 'decryptedData.specialization': { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        if (gender) {
+            query['decryptedData.gender'] = gender;
+        }
+        if (specialization) {
+            query['decryptedData.specialization'] = { $regex: `^${specialization}$`, $options: 'i' };
+        }
+        if (city) query['decryptedData.address.city'] = { $regex: city, $options: 'i' };
+        if (state) query['decryptedData.address.state'] = { $regex: state, $options: 'i' };
+        if (country) query['decryptedData.address.country'] = { $regex: country, $options: 'i' };
+
+        const doctors = await this.doctorModel
+            .find(query)
+            .skip((page - 1) * limit)
+            .limit(limit);
+
+        if (!doctors.length) {
+            throw new NotFoundException('No doctors found');
+        }
+
+        const total = await this.doctorModel.countDocuments(query);
+
+        return {
+            total,
+            page,
+            limit,
+            data: doctors.map((doc) => ({
+                id: doc._id,
+                fhirId: doc.fhirId,
+                data: JSON.parse(decryptPHI(doc.encryptedData, doc.iv, doc.tag)),
+            })),
+        };
     }
 
     async getDoctorByUserId(userId: string) {

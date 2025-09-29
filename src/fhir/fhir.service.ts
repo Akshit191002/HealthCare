@@ -28,7 +28,7 @@ export class FhirService {
     return mockFhirId;
   }
 
-  async createPractitioner(doctor: { firstName: string; lastName: string; dob: string; gender: string; specialization: string; licenseNumber: string }) {
+  async createPractitioner(doctor: { firstName: string; lastName: string; gender: string; specialization: string; licenseNumber: string }) {
     const mockFhirId = 'mock-fhir-practitioner-id-789';
     this.logger.log(`FHIR practitioner created (mock) with ID: ${mockFhirId}`);
     return mockFhirId;
