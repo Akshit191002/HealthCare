@@ -7,6 +7,7 @@ import { RolesGuard } from 'src/utils/roles.guard';
 import { Roles } from 'src/utils/roles.decorator';
 import { DoctorsService } from 'src/doctor/doctor.service';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+import { AddFamilyMemberDto } from './dto/register-family.dto';
 
 @ApiTags('Patients')
 @ApiBearerAuth('bearerAuth')
@@ -27,14 +28,14 @@ export class PatientsController {
     return await this.patientsService.registerPatient(dto, req.user.userId);
   }
 
-  // @Roles('patient')
-  // @Get()
-  // @ApiOperation({ summary: 'Get All Patient' })
-  // @ApiResponse({ status: 201, description: 'Patient list retrieved successfully' })
-  // @ApiResponse({ status: 400, description: 'Internal server error' })
-  // async getAll() {
-  //   return await this.patientsService.getAllPatients();
-  // }
+  @Roles('patient')
+  @Post('addFamily')
+  @ApiOperation({ summary: 'Register a new patient' })
+  @ApiResponse({ status: 201, description: 'Patient successfully registered' })
+  @ApiResponse({ status: 400, description: 'Validation or Bad Request' })
+  async addFamily(@Body() dto: AddFamilyMemberDto, @Req() req) {
+    return await this.patientsService.addFamilyMember(dto, req.user.userId);
+  }
 
   @Roles('patient')
   @Get()
@@ -90,8 +91,8 @@ export class PatientsController {
   @ApiOperation({ summary: 'Get patient by ID (only if belongs to current user)' })
   @ApiResponse({ status: 200, description: 'Patient details retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Patient not found or unauthorized' })
-  async getById(@Param('id') id: string, @Req() req) {
-    return await this.patientsService.getPatientById(req.user.userId, id);
+  async getById(@Param('id') id: string) {
+    return await this.patientsService.getPatientById(id);
   }
 
 
@@ -101,11 +102,11 @@ export class PatientsController {
   @ApiResponse({ status: 200, description: 'Patient details updated successfully' })
   @ApiResponse({ status: 404, description: 'Patient not found or unauthorized' })
   async updateDetails(@Param('id') patientId: string, @Req() req, @Body() updateDto: UpdatePatientDto) {
-    return await this.patientsService.updateDeatils(req.user.userId, patientId, updateDto);
+    return await this.patientsService.updateDetails(req.user.userId, patientId, updateDto);
   }
 
   @Roles('patient')
-  @Delete('all')
+  @Delete()
   @ApiOperation({ summary: 'Soft delete patient accounts for the current user' })
   @ApiResponse({ status: 200, description: 'patient accounts deleted successfully' })
   @ApiResponse({ status: 404, description: 'No patient accounts found to delete' })
@@ -118,9 +119,7 @@ export class PatientsController {
   @ApiOperation({ summary: 'Remove patient account for the current user' })
   @ApiResponse({ status: 200, description: 'Patient account deleted successfully' })
   @ApiResponse({ status: 404, description: 'Patient not found or unauthorized' })
-  async deletePatient(@Req() req, @Param('id') patientId: string) {
-    return await this.patientsService.removePatient(req.user.userId, patientId);
+  async deletePatient(@Param('id') patientId: string) {
+    return await this.patientsService.removePatient(patientId);
   }
-
-
 }

@@ -26,10 +26,11 @@ import * as nodemailer from 'nodemailer';
 interface EmailOptions {
   to: string;
   subject: string;
-  text: string;
+  text?: string;
+  html?: string; 
 }
 
-export async function sendEmail({ to, subject, text }: EmailOptions) {
+export async function sendEmail({ to, subject, text, html }: EmailOptions) {
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
@@ -44,6 +45,7 @@ export async function sendEmail({ to, subject, text }: EmailOptions) {
     to,
     subject,
     text,
+    html, 
   };
 
   await transporter.sendMail(mailOptions);

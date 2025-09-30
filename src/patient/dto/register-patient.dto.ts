@@ -1,4 +1,4 @@
-import { IsString, IsDateString, ValidateNested, IsNumber, IsOptional, IsEnum, Matches, Min, Max, MinLength, registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+import { IsString, IsDateString, ValidateNested, IsNumber, IsOptional, IsEnum, Matches, Min, Max, MinLength, registerDecorator, ValidationOptions, ValidationArguments, IsEmail } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -112,6 +112,10 @@ export class RegisterPatientDto {
   @Matches(/^[a-zA-Z\s'-]+$/, { message: 'Last name can contain only letters' })
   lastName: string;
 
+  @ApiProperty({ example: 'john.doe@example.com', description: 'Email of the patient' })
+  @IsEmail({}, { message: 'Invalid email address' })
+  email: string;
+
   @ApiProperty({ example: '1990-05-15', description: 'Date of birth (ISO 8601 format)' })
   @IsDateString()
   @IsPastDateWithAge({ message: 'Date of birth must be a past date' })
@@ -121,16 +125,16 @@ export class RegisterPatientDto {
   @IsEnum(Gender)
   gender: Gender;
 
-  @ApiProperty({ example: 'A+', enum: BloodGroup, description: 'Blood group of the patient' })
+  @ApiProperty({ example: 'A+', enum: BloodGroup, description: 'Blood group of the patient', required: false })
   @IsEnum(BloodGroup)
-  bloodGroup: BloodGroup;
+  bloodGroup?: BloodGroup;
 
-  @ApiProperty({ example: '+91 9876543210', description: 'Full phone number with country code' })
+  @ApiProperty({ example: '+91 9876543210', description: 'Full phone number with country code', required: false })
   @IsString()
   @Matches(/^\+\d{1,3}\s?\d{10}$/, {
     message: 'Phone number must include country code and exactly 10 digits for the number part, optionally separated by a space'
   })
-  phone: string;
+  phone?: string;
 
   @ApiProperty({ example: 175.8, description: 'Height of the patient in cm', required: false })
   @IsOptional()

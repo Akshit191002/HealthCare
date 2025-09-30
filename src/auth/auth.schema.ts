@@ -15,8 +15,17 @@ export class Auth {
   @Prop({ required: true })
   password: string;
 
+  @Prop()
+  mpin?: string;
+
   @Prop({ type: String, enum: Role, default: Role.PATIENT })
   role: Role;
+
+  @Prop({ default: false })
+  isVerified: boolean;
+
+  @Prop({ default: false })
+  mustChangePassword: boolean;
 }
 
 export type AuthDocument = Auth & Document;

@@ -9,6 +9,12 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nes
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgetPasswordDto } from './dto/forget-password.dto';
 import { RefreshTokenDto } from './dto/refreshToken.dto';
+import { SetMPINDto } from './dto/set-mpin.dto';
+import { verifyMpinDto } from './dto/verify-mpin.dto';
+import { UpdateMPINDto } from './dto/update-mpin.dto';
+import { ForgetMpinDto } from './dto/forget-mpin.dto';
+import { ResetMpinDto } from './dto/reset-mpin.dto';
+import { OtpDto } from './dto/send-otp.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -39,8 +45,65 @@ export class AuthController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post('create-mpin')
+  @ApiBearerAuth('bearerAuth')
+  @ApiOperation({ summary: 'Create a 4-digit MPIN' })
+  @ApiBody({ type: SetMPINDto })
+  @ApiResponse({ status: 201, description: 'MPIN create successfully' })
+  @ApiResponse({ status: 400, description: 'MPINs do not match or invalid input' })
+  async setMpin(@Req() req, @Body() dto: SetMPINDto) {
+    return this.authService.setMpin(req.user.userId, dto);
+  }
+
+  @Post('login-mpin')
+  @ApiOperation({ summary: 'Verify the MPIN' })
+  @ApiBody({ type: verifyMpinDto })
+  @ApiResponse({ status: 200, description: 'MPIN verified successfully' })
+  @ApiResponse({ status: 400, description: 'MPIN not set or invalid' })
+  async verifyMpin(@Body() dto: verifyMpinDto) {
+    return this.authService.loginMpin(dto.userid, dto.mpin);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-mpin')
+  @ApiBearerAuth('bearerAuth')
+  @ApiOperation({ summary: 'Upadte a 4-digit MPIN' })
+  @ApiBody({ type: UpdateMPINDto })
+  @ApiResponse({ status: 201, description: 'MPIN update successfully' })
+  @ApiResponse({ status: 400, description: 'MPINs do not match or invalid input' })
+  async updateMpin(@Req() req, @Body() dto: UpdateMPINDto) {
+    return this.authService.changeMpin(req.user.userId, dto);
+  }
+
+  @Post('forget-mpin')
+  @ApiOperation({ summary: 'Request OTP to reset password' })
+  @ApiResponse({ status: 201, description: 'OTP sent to your email' })
+  @ApiResponse({ status: 400, description: 'Invalid Email' })
+  async forgetmpin(@Body() dto: ForgetMpinDto) {
+    try {
+      return await this.authService.forgetMpin(dto.email);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post('reset-mpin')
+  @ApiOperation({ summary: 'Reset password using OTP' })
+  @ApiResponse({ status: 201, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request / Invalid OTP' })
+  async resetmpin(@Body() dto: ResetMpinDto) {
+    try {
+      return await this.authService.resetMpin(dto.email, dto.otp, dto.newMpin);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+
   @Post('login')
   @ApiOperation({ summary: 'Login user and return JWT token' })
+  @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() dto: LoginDto) {
@@ -101,6 +164,30 @@ export class AuthController {
     return this.authService.refreshToken(dto.userId, dto.refreshToken);
   }
 
+  @Post('email-otp')
+  @ApiOperation({ summary: 'Verify OTP and create user account' })
+  @ApiResponse({ status: 201, description: 'User registered successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid OTP or expired' })
+  async sendOtp(@Body() dto: OtpDto) {
+    try {
+      return await this.authService.sendVerificationOtp(dto.email);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Post('verify-email-otp')
+  @ApiOperation({ summary: 'Verify OTP and create user account' })
+  @ApiResponse({ status: 201, description: 'User registered successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid OTP or expired' })
+  async verifyEmailOtp(@Body() dto: VerifyOtpDto) {
+    try {
+      return await this.authService.verifyEmailOtp(dto.email,dto.otp);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('bearerAuth')
@@ -111,4 +198,6 @@ export class AuthController {
     const accessToken = req.headers.authorization?.replace('Bearer ', '');
     return await this.authService.logout(req.user.userId, accessToken);
   }
+
+
 }
