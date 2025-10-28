@@ -29,11 +29,14 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.0",
+    "aws-sdk": "^2.1692.0",
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "crypto": "^1.0.1",
+    "dotenv": "^17.2.3",
+    "googleapis": "^161.0.0",
     "ioredis": "^5.8.0",
     "mongoose": "^7.8.7",
     "nodemailer": "^7.0.6",
@@ -41,6 +44,7 @@
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "square": "^43.1.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {

@@ -4,9 +4,16 @@ import * as bodyParser from 'body-parser';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(
+    '/square/webhook',
+    bodyParser.json({
+      verify: (req: any, res, buf) => {
+        req.rawBody = buf.toString(); 
+      },
+    }),
+  );
   app.use(bodyParser.json());
    app.useGlobalPipes(
     new ValidationPipe({
